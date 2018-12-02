@@ -1,8 +1,8 @@
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_LSM303_U.h>
-#include <Adafruit_L3GD20.h>
-#include <Adafruit_BMP280.h>
+#include <Adafruit_LSM303_U.h> // 220 Hz
+#include <Adafruit_L3GD20.h> // 190 or 380 Hz (we don't know but high frequency = less precision) 
+#include <Adafruit_BMP280.h> // 157 Hz
 
 #include <SD.h>
 #define cardSelect 4 //default pin for communicating with the built in SD card board
@@ -14,6 +14,7 @@ Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(12345);
 Adafruit_L3GD20 gyro;
 Adafruit_BMP280 bmp;
+
 
 /* Initialize Variables */
 double a_x = 0, a_y = 0, a_z = 0,
@@ -63,15 +64,15 @@ void setup(void)
   {
     /* There was a problem detecting the ADXL345 ... check your connections */
     Serial.println("Ooops, no LSM303 detected ... Check your wiring!");
-    error(1);
+    //error(1);
     while(1);
   }
     if(!mag.begin())
   {
     /* There was a problem detecting the ADXL345 ... check your connections */
     Serial.println("Ooops, no LSM303 detected ... Check your wiring!");
-    error(2);
-    while(1);
+    //error(2);
+    //while(1); //this is always called, we don't know if it is because of physical error or library error
   }
     // Try to initialise and warn if we couldn't detect the chip
   if (!gyro.begin(gyro.L3DS20_RANGE_250DPS))
@@ -79,10 +80,13 @@ void setup(void)
     Serial.println("Oops ... unable to initialize the L3GD20. Check your wiring!");
     while (1);
   }
+
+  mag.setMagRate(LSM303_MAGRATE_220); // Sets mag to 220 Hz
+
   if (!bmp.begin()) {
     Serial.println("Could not find a valid BMP280 sensor, check wiring!");
-    error(3);
-    /*while (1);*/
+    //error(3);
+    //while (1); // this is always called, we don't know if it is because of physical error or library error
   }
     /* Default settings from datasheet. */
   bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
@@ -98,7 +102,7 @@ void setup(void)
   /* SD CARD WRITING SETUP    */
   if (!SD.begin(cardSelect)) {  //initialize card
     Serial.println("Card init. failed!");
-    error(4);
+    //error(4);
   }
   char filename[16];
   strcpy(filename, "IMUDAT00.TXT");
@@ -120,55 +124,82 @@ void setup(void)
   
   digitalWrite(13, HIGH) ;
 }
+
+sensors_event_t magEvent;
+sensors_event_t accelEvent;
+unsigned long startTime;
+int flushCount = 0;
   
-void loop(void)
+void loop()
 {
+  //TODO: DEBUG INFO
   /* Get a new sensor event */
-  sensors_event_t accelEvent;
-  sensors_event_t magEvent;
-  accel.getEvent(&accelEvent);
-  mag.getEvent(&magEvent);
-  gyro.read();
   
+  startTime = millis();
+
+  accel.getEvent(&accelEvent);
+
 //  a_x = accelEvent.acceleration.x;
 //  a_y = accelEvent.acceleration.y;
 //  a_z = accelEvent.acceleration.z;
   a_x = accel.raw.x;
   a_y = accel.raw.y;
   a_z = accel.raw.z;
+
+  Serial.print("Time to read ACCEL: ");
+  Serial.println(millis() - startTime);
+  startTime = millis();
+
+  gyro.read();
   gy_x = gyro.data.x;
   gy_y = gyro.data.y;
   gy_z = gyro.data.z;
+
+  Serial.print("Time to read GYRO: ");
+  Serial.println(millis() - startTime);
+  startTime = millis();
+  
+  mag.getEvent(&magEvent);
   mag_x = magEvent.magnetic.x;
   mag_y = magEvent.magnetic.y;
   mag_z = magEvent.magnetic.z;
-  bmp.readPressure();
-  bmp.readTemperature();
+
+  Serial.print("Time to read MAG: ");
+  Serial.println(millis() - startTime);
+  startTime = millis();
+
+  //bmp.readPressure();
+  //bmp.readTemperature();
   alt = bmp.readAltitude(1013.25);
-  Serial.print(millis());
-  /* Display the results (acceleration is measured in m/s^2) */
-  Serial.print(a_x);
-  Serial.print(",");
-  Serial.print(a_y);
-  Serial.print(",");
-  Serial.print(a_z);
-  Serial.print(",");
-  /*  Degrees per second     */
-  Serial.print(gy_x);
-  Serial.print(",");
-  Serial.print(gy_y);
-  Serial.print(",");
-  Serial.print(gy_z);
-  Serial.print(",");
-  /*     microTesla (uT)     */
-  Serial.print(mag_x);
-  Serial.print(",");
-  Serial.print(mag_y);
-  Serial.print(",");
-  Serial.print(mag_z);
-  Serial.print(",");
-  Serial.print(alt);
-  Serial.print("\n");
+
+  Serial.print("Time to read ALT: ");
+  Serial.println(millis() - startTime);
+  startTime = millis();
+  
+  // Serial.print(millis());
+  // /* Display the results (acceleration is measured in m/s^2) */
+  // Serial.print(a_x);
+  // Serial.print(",");
+  // Serial.print(a_y);
+  // Serial.print(",");
+  // Serial.print(a_z);
+  // Serial.print(",");
+  // /*  Degrees per second     */
+  // Serial.print(gy_x);
+  // Serial.print(",");
+  // Serial.print(gy_y);
+  // Serial.print(",");
+  // Serial.print(gy_z);
+  // Serial.print(",");
+  // /*     microTesla (uT)     */
+  // Serial.print(mag_x);
+  // Serial.print(",");
+  // Serial.print(mag_y);
+  // Serial.print(",");
+  // Serial.print(mag_z);
+  // Serial.print(",");
+  // Serial.print(alt);
+  // Serial.print("\n");
 
   logfile.print(millis());
   logfile.print(",");
@@ -193,6 +224,22 @@ void loop(void)
   logfile.print(mag_z);
   logfile.print(",");
   logfile.println(alt);
-  logfile.flush();
+
+  Serial.print("Time to WRITE ");
+  Serial.println(millis() - startTime);
+  startTime = millis();
+  
+  flushCount++;
+
+  if (flushCount == 5){
+    logfile.flush();  
+    flushCount = 0;
+  }
+  
+
+  Serial.print("Time to FLuSH ");
+  Serial.println(millis() - startTime);
+  startTime = millis();
+
   /* Delay before the next sample */
 }
